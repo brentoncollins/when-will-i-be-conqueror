@@ -114,17 +114,17 @@ td {
 }
 
 .plot {
-  height: 85vh;/* Subtract the total margin from the width */
+  height: 60vh;/* Subtract the total margin from the width */
 
 }
 
 .plot-section {
-  height: 65vh;
+  height: 60vh;
 }
 
 .plot svg {
   width: 100%;
-  height: 65vh;
+  height: 60vh;
 }
 
 .centered-message {
@@ -133,7 +133,7 @@ td {
   left: 50%;
   transform: translate(-50%, -50%);
   color: white;
-  font-size: 60px;
+  font-size: 40px;
   font-weight: bold;
 }
 
@@ -204,7 +204,7 @@ ol {
   }
 
   .plot, .plot-section, .plot svg {
-    height: 65vh;
+    height: 60vh;
   }
 }
 
@@ -212,7 +212,6 @@ ol {
 @media screen and (max-width: 768px) {
 
   #root{
-    display: flex;
     flex-direction: column;
     height: 500px;
   }
@@ -249,11 +248,22 @@ ol {
   .info-text {
     font-size: 22px; /* Decrease the font size */
     margin-bottom: 20px; /* Decrease the space below the heading */
-    padding: 5px;
+    padding: 10px;
   }
 
   .centered-message {
-    font-size: 40px; /* Decrease the font size */
-    top: 80%
+    font-size: 14px; /* Decrease the font size */
+    padding-top: 5px;
+    transform: none; /* Reset the transform */
+    position: static; /* Follow the normal document flow */
+    display: flex; /* Enable flex layout */
+    justify-content: center; /* Center content horizontally */
+    align-items: center; /* Center content vertically */
   }
+
+  /* Styles for the instructions list */
+  ol {
+    font-size: 14px;
+  }
+
 }

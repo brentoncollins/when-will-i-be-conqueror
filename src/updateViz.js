@@ -2,7 +2,6 @@ import * as d3 from "d3";
 const apiUrl = process.env.NODE_ENV === 'production' ? process.env.REACT_APP_PROD_API_URL : process.env.REACT_APP_DEV_API_URL;
 
 
-
 export const updateVisualization = (data,
                                     x1,
                                     y1,
@@ -23,15 +22,14 @@ export const updateVisualization = (data,
     console.log('updateVisualization y1:', y1);
     console.log('updateVisualization x2:', x2);
     console.log('updateVisualization y2:', y2);
+    console.log('updateVisualization slope:', slope);
+    console.log('updateVisualization intercept:', intercept);
+    console.log('updateVisualization playerName:', playerName);
     console.log('updateVisualization svgRef:', svgRef);
     console.log('updateVisualization width:', width);
     console.log('updateVisualization height:', height);
-    console.log('updateVisualization predictionLimit:', predictionLimit);
-    console.log('updateVisualization playerName:', playerName);
-    console.log('updateVisualization slope:', slope);
-    console.log('updateVisualization intercept:', intercept);
-    console.log('updateVisualization updateVisualization');
     console.log('updateVisualization margin:', margin);
+    console.log('updateVisualization predictionLimit:', predictionLimit);
 
 
     console.log(data)
@@ -83,6 +81,7 @@ export const updateVisualization = (data,
     const yAxis = d3.axisLeft(yScale)
         .ticks(5); // Adjust for desired number of ticks
 
+
 // Append the player's name to the SVG
     svg.append('text')
         .attr('x', width / 2) // Center horizontally
@@ -92,6 +91,16 @@ export const updateVisualization = (data,
         .attr('fill', 'white')
         .attr('text-anchor', 'middle');
 
+// Append the additional text to the SVG on a new line
+    if (slope < 0) {
+        svg.append('text')
+            .attr('x', width / 2) // Center horizontally
+            .attr('y', height / 8 + 20) // Position below the previous text
+            .text('Sorry, can\'t do much with a negative slope.')
+            .attr('font-size', '20px')
+            .attr('fill', 'white')
+            .attr('text-anchor', 'middle');
+    }
     // Append y-axis to SVG
     svg.append("g")
         .attr("transform", `translate(${margin.left},0)`)

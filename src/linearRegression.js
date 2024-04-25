@@ -25,6 +25,13 @@ export function getRegressionLine(dates, ratings, predictionLimit) {
     let intercept = (sum_y - slope * sum_x) / n;
     let x1 = dates[0].getTime();
 
+    // If the slope is negative, the rating will never reach the upper bound
+
+    if (slope < 0) {
+        predictionLimit = 300;
+    }
+
+
     // Calculate the upper bound of the ratings
     let maxRating = Math.max(...ratings);
     let upperBound = maxRating > 1600 ? maxRating : 1600;
