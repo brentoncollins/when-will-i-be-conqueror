@@ -3,7 +3,6 @@ import Select from 'react-select';
 import makeAnimated from 'react-select/animated';
 import AsyncSelect from 'react-select/async';
 import {ranks, ranksToOptions} from "./ranks";
-import {fetchPlayerDataOnly, updateVisualization} from './updateViz';
 import './App.css';
 import * as d3 from "d3";
 import {getRegressionLine} from "./linearRegression";
@@ -31,6 +30,197 @@ function App(callback, deps) {
     const apiUrl = process.env.NODE_ENV === 'production' ? process.env.REACT_APP_PROD_API_URL : process.env.REACT_APP_DEV_API_URL;
     const [rankPredictOptions, setRankPredictOptions] = useState(ranksToOptions(ranks));
 
+
+    const updateVisualization = useCallback(() => {
+
+        const dimensions = getViewportDimensions();
+        let width, height, data, x1, y1, x2, y2, slope, intercept, playerName;
+        width = dimensions.width;
+        height = dimensions.height;
+        data = playerData.playerData;
+        x1 = regressionDataSet.x1;
+        y1 = regressionDataSet.y1;
+        x2 = regressionDataSet.x2;
+        y2 = regressionDataSet.y2;
+        slope = regressionDataSet.slope;
+        intercept = regressionDataSet.intercept;
+        playerName = playerData.playerName;
+        const margin = dimensions.padding;
+
+        console.log('updateVisualization data:', data);
+
+
+        const svg = d3.select(svgRef.current);
+
+        svg.selectAll("*").remove();
+
+
+        // Adjust the width by subtracting the left and right margins
+        const adjustedWidth = width - margin.left - margin.right;
+
+        const xScale = d3.scaleTime()
+            .domain([x1, x2]) // Use x2 as the upper limit
+            .range([margin.left, adjustedWidth]); // Use the adjusted width here
+
+        // Calculate the minimum and maximum y values
+        // Calculate the minimum and maximum y values
+        // Calculate the minimum y value
+        const minY = Math.min(y1, y2, ...data.map(d => d.rating)) - 50;
+        const maxY = Math.max(predictionLimit.value, Math.max(...data.map(d => d.rating)));
+
+        // Set scales
+        const yScale = d3.scaleLinear()
+            .domain([minY, maxY]) // Set the domain to [minY, maxY]
+            .range([height - margin.bottom, margin.top]);
+
+        // Line generator for the player data
+        const line = d3.line()
+            .defined(d => !isNaN(d.date) && !isNaN(d.rating)) // Ignore data points with non-numeric date or rating
+            .x(d => xScale(d.date))
+            .y(d => yScale(d.rating));
+
+        // Create x-axis
+        const xAxis = d3.axisBottom(xScale)
+            .ticks(5) // Adjust for desired number of ticks
+            .tickFormat(d3.timeFormat("%Y-%m-%d")); // Format date
+
+        // Append x-axis to SVG
+        svg.append("g")
+            .attr("transform", `translate(0,${height - margin.bottom})`) // Adjust y-position of x-axis
+            .call(xAxis)
+            .selectAll("text")
+            .attr("transform", "rotate(-65)") // Rotate labels for readability
+            .style("text-anchor", "end");
+
+        // Create y-axis
+        const yAxis = d3.axisLeft(yScale)
+            .ticks(5); // Adjust for desired number of ticks
+
+
+        // Append the player's name to the SVG
+        svg.append('text')
+            .attr('x', width / 2) // Center horizontally
+            .attr('y', height / 8) // Small margin from the top
+            .text(playerName)
+            .attr('font-size', '20px')
+            .attr('fill', 'white')
+            .attr('text-anchor', 'middle');
+
+        // Append the additional text to the SVG on a new line
+        if (slope < 0) {
+            svg.append('text')
+                .attr('x', width / 2) // Center horizontally
+                .attr('y', height / 8 + 20) // Position below the previous text
+                .text('Sorry, can\'t do much with a negative slope.')
+                .attr('font-size', '20px')
+                .attr('fill', 'white')
+                .attr('text-anchor', 'middle');
+        }
+        // Append y-axis to SVG
+        svg.append("g")
+            .attr("transform", `translate(${margin.left},0)`)
+            .call(yAxis);
+
+        // Append the path for line
+        svg.append('path')
+            .datum(data)
+            .attr('fill', 'none')
+            .attr('stroke', 'steelblue')
+            .attr('stroke-width', 1.5)
+            .attr('d', line);
+
+        // Draw the regression line from x1 to x2
+        svg.append("line")
+            .attr("x1", xScale(x1))
+            .attr("y1", yScale(y1))
+            .attr("x2", xScale(x2))
+            .attr("y2", yScale(y2))
+            .attr("stroke", "red")
+            .attr("stroke-width", 2)
+            .style("stroke-dasharray", ("3, 3"));
+
+        // Append small dots for each data point
+        svg.selectAll(".dot")
+            .data(data)
+            .enter().append("circle") // Uses the enter().append() method
+            .attr("class", "dot") // Assign a class for styling
+            .attr("cx", function (d) {
+                return xScale(d.date)
+            })
+            .attr("cy", function (d) {
+                return yScale(d.rating)
+            })
+            .attr("r", 1) // Radius size, you can adjust as needed
+            .attr("fill", "white"); // Fill color, you can adjust as needed
+
+
+        ranks.forEach(rank => {
+
+            if ((rank.max_width < width) || (rank.points === predictionLimit.value)) {
+
+                const x = new Date(((rank.points - intercept) / slope));
+
+                if (x >= x1 && x <= x2) {
+                    // Append SVG image instead of circle
+                    svg.append('image')
+                        .attr('xlink:href', rank.filename)
+                        .attr('x', xScale(x)) // Center the image at the point; adjust as needed
+                        .attr('y', yScale(rank.points))
+                        .attr('width', 40)
+                        .attr('height', 40);
+
+                    // Append label
+                    svg.append('text')
+                        .attr('x', xScale(x))
+                        .attr('y', yScale(rank.points) - 25) // Adjust position above the image
+                        .text(rank.name)
+                        .attr('font-size', '10px')
+                        .attr('font-weight', 'bold')
+                        .attr('fill', 'white')
+                        .attr('text-anchor', 'middle');
+
+                    svg.append('text')
+                        .attr('x', xScale(x))
+                        .attr('y', yScale(rank.points) + 60) // Adjust position below the image
+                        .text(d3.timeFormat("%Y-%m-%d")(x)) // Format date
+                        .attr('font-size', '12px')
+                        .attr('font-weight', 'bold')
+                        .attr('fill', 'white')
+                        .attr('text-anchor', 'middle')
+                        .attr('transform', `rotate(-90, ${xScale(x)}, ${yScale(rank.points) + 60})`);
+                }
+            }
+        });
+
+    }, [playerData, regressionDataSet, selectedPlayer, predictionLimit]); // Add any dependencies here
+
+    const fetchPlayerDataOnly = async () => {
+        try {
+
+            const response = await fetch(`${apiUrl}/get_player_data?playerID=${selectedPlayer.value}&gameType=${gameType.value}&predictionLimit=${predictionLimit.value}`);
+            const responseData = await response.text();
+
+            // Check if the response is valid JSON
+            let playerData;
+            try {
+                playerData = JSON.parse(responseData);
+            } catch (error) {
+                throw new Error('fetchPlayerDataOnly Invalid JSON: ' + responseData);
+            }
+
+            const dates = playerData.dates.map(date => new Date(date * 1000));
+            const ratings = playerData.ratings;
+
+            return {
+                playerData: dates.map((date, i) => ({date, rating: ratings[i]})),
+                playerName: playerData.player_name,
+                playerId: playerData.player_id
+            };
+        } catch (error) {
+            console.error("fetchPlayerDataOnly Failed to fetch data:", error)
+            return {playerData: []};
+        }
+    };
 
     // Options for the game type dropdown
     const gameTypeOptions = [
@@ -138,7 +328,6 @@ function App(callback, deps) {
             setSelectedPlayerState(player);
 
             // Set the rank options
-            setRankOptions();
             if (player.value && predictionLimit) {
 
                 await handlePlayerData(player.value, gameType.value);
@@ -212,7 +401,6 @@ function App(callback, deps) {
         const playerData = await fetchPlayerDataOnly(selectedPlayer.value, gameType.value, predictionLimit.value);
 
 
-
         // Check if the player data is valid
         if (playerData && playerData.playerData && playerData.playerData.length > 0) {
             // Get the dates and ratings
@@ -223,7 +411,7 @@ function App(callback, deps) {
                 // Set the regression data
                 setRegressionData(regressionData);
                 setPlayerData(playerData);
-                console.log('handlePlayerData Player data:', playerData);
+
                 setRankOptions(regressionData);
             }
         } else {
@@ -271,60 +459,23 @@ function App(callback, deps) {
     };
 
 
-    // Function to update the dimensions of the SVG
-    const updateDimensions = useCallback(() => {
-        // Get the new dimensions
-        const dimensions = getViewportDimensions();
-
-        // Redraw the SVG with the new dimensions
-        if (playerData.playerData && playerData.playerData.length > 0 && regressionDataSet) {
-            console.log('Update Dimensions Player Data:', playerData.playerData);
-            console.log('Update Dimensions Regression Data:', regressionDataSet);
-            console.log('Update Dimensions Prediction Limit:', predictionLimit);
-            console.log('Update Dimensions Dimensions:', dimensions);
-            console.log('Update Dimensions SVG Ref:', svgRef);
-            updateVisualization(
-                playerData.playerData,
-                regressionDataSet.x1,
-                regressionDataSet.y1,
-                regressionDataSet.x2,
-                regressionDataSet.y2,
-                regressionDataSet.slope,
-                regressionDataSet.intercept,
-                playerData.playerName,
-                svgRef,
-                dimensions.width,
-                dimensions.height,
-                dimensions.padding,
-                predictionLimit.value
-            );
-        }
-    }, [
-        getViewportDimensions,
-        playerData,
-        regressionDataSet,
-        predictionLimit.value
-    ]);
-
 
     // Function to set the rank options
     const setRankOptions = (regData) => {
-        console.log("setRankOptions Setting rank options")
-        console.log("setRankOptions Selected Rank", gameType.value)
-        console.log("setRankOptions Selected Player", selectedPlayer)
+
         if (selectedPlayer.value !== '') {
             const rating = gameType.value === 'rm_solo' ? selectedPlayer.ratingSolo : selectedPlayer.ratingTeam;
             const gameMode = gameType.value === 'rm_solo' ? "solo" : "team";
-            console.log('Handle Rank Options:', rating, gameMode)
+
             handleRankOptions(regData, rating, gameMode);
         }
     }
 
     // Function to set the rank options based on the rating
     const handleRankOptions = (regData, rating, gameMode) => {
-        console.log('Player Data Slope:', regData.slope)
-        if(regData.slope > 0) {
-            console.log(`setRankOptions Setting rank options for ${gameMode}`)
+
+        if (regData.slope > 0) {
+
             if (rating > 1600) {
                 setErrorMessage(`Sorry, we cant plot for you, your ${gameMode} rating is above Conqueror III.`);
                 return;
@@ -339,7 +490,7 @@ function App(callback, deps) {
             setRankPredictOptions(ranksToOptions(ranks.filter(rank => rank.points > nextRank.points)));
             setPredictionLimit(rankPredictOptions[rankPredictOptions.length - 1]);
         }
-        if (regData.slope <0){
+        if (regData.slope < 0) {
             // Set to bronze, all the way down when slope is negative
             const bronzeIRank = ranks.find(rank => rank.name === "Bronze I");
             const bronzeIRankOption = ranksToOptions([bronzeIRank]);
@@ -351,54 +502,40 @@ function App(callback, deps) {
 
     // Use effect to update the visualization when the dimensions change
     useEffect(() => {
-        // Get the new dimensions
 
-        const dimensions = getViewportDimensions();
         // Redraw the SVG with the new dimensions
         if (playerData.playerId === selectedPlayer.value && regressionDataSet && playerData.playerData.length > 0) {
-            updateVisualization(
-                playerData.playerData,
-                regressionDataSet.x1,
-                regressionDataSet.y1,
-                regressionDataSet.x2,
-                regressionDataSet.y2,
-                regressionDataSet.slope,
-                regressionDataSet.intercept,
-                playerData.playerName,
-                svgRef,
-                dimensions.width,
-                dimensions.height,
-                dimensions.padding,
-                predictionLimit.value
-            );
+
+            updateVisualization();
         }
 
     }, [
-        getViewportDimensions,
-        playerData,
-        regressionDataSet,
-        predictionLimit,
-        selectedPlayer,
+        regressionDataSet, playerData, selectedPlayer, updateVisualization
     ]);
+
+    const updateDimensions = useCallback(() => {
+        // Here you can handle the window resize event
+        // For example, you can update the state that stores the window dimensions
+
+        // After handling the resize event, call the updateVisualization function
+        if (playerData.playerId === selectedPlayer.value && regressionDataSet && playerData.playerData.length > 0) {
+            updateVisualization();
+        }
+    }, [updateVisualization, playerData, selectedPlayer, regressionDataSet]); // Pass updateVisualization as a dependency
 
 
     useEffect(() => {
-        console.log('Use effect resize called')
         window.addEventListener('resize', updateDimensions);
 
         // Cleanup function to remove the event listener when the component unmounts
         return () => window.removeEventListener('resize', updateDimensions);
-    }, [updateDimensions]);
+    }, [updateDimensions]); // Pass updateDimensions as a dependency
 
 
     useEffect(() => {
-        console.log('Use effect input value called')
         const timerId = setTimeout(() => {
-            console.log('Debounced input value:', inputValue);
             handleSearchTextInput(inputValue);
         }, 1000);
-        console.log('Timer ID:', timerId);
-        console.log('Input value:', inputValue);
         return () => clearTimeout(timerId);
     }, [inputValue, handleSearchTextInput]);
 
@@ -531,9 +668,9 @@ function App(callback, deps) {
             </div>
             <div className="plot-section">
                 <div className="plot">
-                <svg ref={svgRef}></svg>
-                    </div>
-              </div>
+                    <svg ref={svgRef}></svg>
+                </div>
+            </div>
         </div>
     );
 }
