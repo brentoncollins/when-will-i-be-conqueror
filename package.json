@@ -7,12 +7,16 @@
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "d3": "^7.9.0",
-    "lodash": "^4.17.21",
+    "install": "^0.13.0",
+    "lodash.debounce": "^4.0.8",
+    "loglevel": "^1.9.1",
+    "npm": "^10.6.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
     "react-select": "^5.8.0",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "winston": "^3.13.0"
   },
   "scripts": {
     "start": "react-scripts start",

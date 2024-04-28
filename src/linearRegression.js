@@ -1,3 +1,12 @@
+import Logger from './logger';
+
+if (process.env.NODE_ENV === 'development') {
+    Logger.logLevel = 'debug';
+} else {
+    Logger.logLevel = 'warn';
+}
+
+
 export function getRegressionLine(dates, ratings, predictionLimit) {
 
     // Check that all dates are defined
@@ -47,7 +56,7 @@ export function getRegressionLine(dates, ratings, predictionLimit) {
 
     let data = { slope, intercept, x1, y1, x2, y2 };
 
-    console.log('getRegressionLine  data:', data);
+    Logger.debug('getRegressionLine', data);
 
     return data;
 }

@@ -114,17 +114,17 @@ td {
 }
 
 .plot {
-  height: 60vh;/* Subtract the total margin from the width */
+  height: 70vh;/* Subtract the total margin from the width */
 
 }
 
 .plot-section {
-  height: 60vh;
+  height: 70vh;
 }
 
 .plot svg {
   width: 100%;
-  height: 60vh;
+  height: 70vh;
 }
 
 .centered-message {
@@ -148,7 +148,7 @@ ol {
   background-color: #1f242a; /* Light gray background */
   border-radius: 8px; /* Rounded corners */
   padding: 20px; /* Padding around the text */
-  width: 300px; /* Fixed width */
+  width: 500px; /* Fixed width */
   margin: 20px auto; /* Center align the list */
   list-style-position: inside; /* Position numbers inside the content area */
   font-size: 16px;
@@ -204,7 +204,7 @@ ol {
   }
 
   .plot, .plot-section, .plot svg {
-    height: 60vh;
+    height: 65vh;
   }
 }
 
@@ -264,6 +264,7 @@ ol {
   /* Styles for the instructions list */
   ol {
     font-size: 14px;
+    width: 80%; /* Full width */
   }
 
 }

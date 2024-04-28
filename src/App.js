@@ -1,27 +1,28 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
-import Select from 'react-select';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Select, { components } from 'react-select';
 import makeAnimated from 'react-select/animated';
 import AsyncSelect from 'react-select/async';
-import {ranks, ranksToOptions} from "./ranks";
+import { ranks, ranksToOptions } from "./ranks";
+import debounce from 'lodash.debounce';
 import './App.css';
 import * as d3 from "d3";
-import {getRegressionLine} from "./linearRegression";
+import { getRegressionLine } from "./linearRegression";
+import Logger from './logger';
+
+
+// You can set the Logger level depending on the environment
+Logger.logLevel = process.env.NODE_ENV === 'development' ? 'debug' : 'error';
+
+
 
 
 const animatedComponents = makeAnimated();
-
-if (process.env.NODE_ENV === 'production') {
-    console.log = () => {
-    };
-}
-
 
 function App(callback, deps) {
     const [selectedPlayer, setSelectedPlayerState] = useState({value: '', label: ''});
     const [inputValue, setInputValue] = useState('');
     const [playerData, setPlayerData] = useState({playerData: []});
     const [regressionDataSet, setRegressionData] = useState(null);
-    const [cachedOptions, setCachedOptions] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
     const svgRef = useRef();
@@ -31,7 +32,18 @@ function App(callback, deps) {
     const [rankPredictOptions, setRankPredictOptions] = useState(ranksToOptions(ranks));
 
 
+    // Options for the game type dropdown
+    const gameTypeOptions = [
+        {value: 'rm_solo', label: 'Solo Ranked'},
+        {value: 'rm_team', label: 'Team Ranked'}
+    ];
+
+
+
+    // Function to update the visualization
     const updateVisualization = useCallback(() => {
+
+        Logger.debug('updateVisualization', "Called updateVisualization")
 
         const dimensions = getViewportDimensions();
         let width, height, data, x1, y1, x2, y2, slope, intercept, playerName;
@@ -47,17 +59,21 @@ function App(callback, deps) {
         playerName = playerData.playerName;
         const margin = dimensions.padding;
 
-        console.log('updateVisualization data:', data);
+        Logger.debug('updateVisualization', data)
+        Logger.debug('updateVisualization', regressionDataSet)
+        Logger.debug('updateVisualization', playerData)
+        Logger.debug('updateVisualization', dimensions)
 
 
+        // Clear the SVG content
         const svg = d3.select(svgRef.current);
-
         svg.selectAll("*").remove();
 
 
         // Adjust the width by subtracting the left and right margins
         const adjustedWidth = width - margin.left - margin.right;
 
+        // Set the SVG width and height
         const xScale = d3.scaleTime()
             .domain([x1, x2]) // Use x2 as the upper limit
             .range([margin.left, adjustedWidth]); // Use the adjusted width here
@@ -194,11 +210,61 @@ function App(callback, deps) {
 
     }, [playerData, regressionDataSet, selectedPlayer, predictionLimit]); // Add any dependencies here
 
+    const CustomInput = props => {
+        return (
+            <components.Input
+                {...props}
+                isDisabled
+            />
+        );
+    };
+
+    const getAsyncOptions = async (inputText) => {
+        let url = `${apiUrl}/find_player?query=${inputText}`
+        Logger.debug('loadPlayerDropdownSelectValues', url)
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            setIsLoading(false);
+
+            return data.map(player => ({
+                value: player.profile_id,
+                label: `${player.name}: ${player.profile_id}`,
+                ratingTeam: player.leaderboards?.rm_team?.rating,
+                ratingSolo: player.leaderboards?.rm_solo?.rating
+            }));
+        } catch (error) {
+            Logger.error('loadPlayerDropdownSelectValues', 'An error occurred:', error);
+            setIsLoading(false);
+            // You can decide what to return in case of an error
+            return [];
+        }
+    };
+
+    const loadOptions = useCallback(
+        debounce((inputText, callback) => {
+            getAsyncOptions(inputText).then((options) => callback(options));
+        }, 600),
+        []
+    );
+
+
+
+    // Function to fetch player data
     const fetchPlayerDataOnly = async () => {
         try {
+            Logger.debug('fetchPlayerDataOnly', "Called fetchPlayerDataOnly")
+            let url = `${apiUrl}/get_player_data?playerID=${selectedPlayer.value}&gameType=${gameType.value}&predictionLimit=${predictionLimit.value}`;
+            Logger.debug('fetchPlayerDataOnly', url)
 
-            const response = await fetch(`${apiUrl}/get_player_data?playerID=${selectedPlayer.value}&gameType=${gameType.value}&predictionLimit=${predictionLimit.value}`);
+            const response = await fetch(url);
             const responseData = await response.text();
+
+            Logger.debug('fetchPlayerDataOnly', responseData)
 
             // Check if the response is valid JSON
             let playerData;
@@ -208,8 +274,13 @@ function App(callback, deps) {
                 throw new Error('fetchPlayerDataOnly Invalid JSON: ' + responseData);
             }
 
+            Logger.debug('fetchPlayerDataOnly', playerData)
+
             const dates = playerData.dates.map(date => new Date(date * 1000));
             const ratings = playerData.ratings;
+
+            Logger.debug('fetchPlayerDataOnly', dates)
+            Logger.debug('fetchPlayerDataOnly', ratings)
 
             return {
                 playerData: dates.map((date, i) => ({date, rating: ratings[i]})),
@@ -217,30 +288,32 @@ function App(callback, deps) {
                 playerId: playerData.player_id
             };
         } catch (error) {
-            console.error("fetchPlayerDataOnly Failed to fetch data:", error)
+            Logger.error("fetchPlayerDataOnly", "Failed to fetch data:", error)
             return {playerData: []};
         }
     };
 
-    // Options for the game type dropdown
-    const gameTypeOptions = [
-        {value: 'rm_solo', label: 'Solo Ranked'},
-        {value: 'rm_team', label: 'Team Ranked'}
-    ];
-
     // Function to get the viewport dimensions, so we can adjust the SVG size
     const getViewportDimensions = useCallback(() => {
+
+        Logger.debug('getViewportDimensions', "Called getViewportDimensions")
+
         const width = window.innerWidth;
         let height = window.innerHeight;
         let padding;
 
+        Logger.debug('getViewportDimensions', width)
+        Logger.debug('getViewportDimensions', height)
+
         // If not on mobile, subtract the banner height and set padding as a percentage
         if (window.innerWidth > 768) {
+            Logger.debug('getViewportDimensions', "Not on mobile")
             const bannerHeight = getBannerHeight();
-            padding = {top: 50, right: width / 5, bottom: 150, left: 50};
+            padding = {top: 50, right: width / 4, bottom: 100, left: 40};
             height = height - bannerHeight - padding.top - padding.bottom;
         } else {
             // On mobile, set a specific height and fixed padding
+            Logger.debug('getViewportDimensions', "On mobile")
             height = 500; // Adjust this value as needed
             padding = {top: 50, right: 0, bottom: 10, left: 50};
             height = height - padding.top - padding.bottom;
@@ -249,73 +322,40 @@ function App(callback, deps) {
         return {width, height, padding};
     }, []);
 
+
+
     // Function to get the banner height, so we can adjust the SVG size
     function getBannerHeight() {
+        Logger.debug('getBannerHeight', "Called getBannerHeight")
         const infoText = document.querySelector('.info-text');
         const dropdownButtonContainer = document.querySelector('.dropdown-button-container');
         const instructionText = document.querySelector('.instruction-text');
         // Use offsetHeight instead of innerHeight
+        Logger.debug('getBannerHeight', infoText.offsetHeight)
+        Logger.debug('getBannerHeight', dropdownButtonContainer.offsetHeight)
+        Logger.debug('getBannerHeight', instructionText.offsetHeight)
+
         return infoText.offsetHeight + dropdownButtonContainer.offsetHeight + instructionText.offsetHeight;
     }
 
-    // Function to load player dropdown select values
-    const loadPlayerDropdownSelectValues = useCallback(async (inputValue) => {
-        // Check if the cached options contain the input value
-        if (cachedOptions[inputValue]) {
-            return cachedOptions[inputValue];  // Return cached data if available
-        }
 
-        setIsLoading(true);
-        try {
-            // Search for players with the input value
-            const response = await fetch(`${apiUrl}/find_player?query=${inputValue}`);
-            const data = await response.json();
-            if (data) {
-                // Map the player data to the required format
-                const playerOptions = data.map(player => ({
-                    value: player.profile_id,
-                    label: `${player.name}: ${player.profile_id}`,
-                    ratingTeam: player.leaderboards?.rm_team?.rating,
-                    ratingSolo: player.leaderboards?.rm_solo?.rating
-                }));
-
-                setCachedOptions(prev => ({...prev, [inputValue]: playerOptions}));  // Cache the fetched results
-                setIsLoading(false);
-                return playerOptions;
-            }
-        } catch (error) {
-            console.error('Error fetching player options:', error);
-            setIsLoading(false);
-            setErrorMessage("No Data Available, Search Again");
-            return [];
-        }
-    }, [apiUrl, cachedOptions]);
-
-    // Handler for input change that updates local state
-    const handleSearchTextInput = useCallback((inputValue) => {
-
-        // If the input value is empty, return
-        if (!inputValue) return;
-        setIsLoading(true);
-        loadPlayerDropdownSelectValues(inputValue).then(playerData => {
-            setIsLoading(false);
-        });
-    }, [loadPlayerDropdownSelectValues]);
-
-    // Handler for input change that updates local state
+    // This function will update the input value state whenever the input changes
     const handleInputChange = (newValue) => {
         setInputValue(newValue);
+        return newValue;
     };
 
     // Function to clear the SVG content
     const clearSvgContent = () => {
+        Logger.debug('clearSvgContent', "Called clearSvgContent")
         d3.select(svgRef.current).selectAll("*").remove();
     };
 
     // Function to handle player dropdown select
     const handlePlayerDropdownSelect = async (player) => {
+        Logger.debug('handlePlayerDropdownSelect', "Called handlePlayerDropdownSelect")
         if (!player || !player.value) {
-            console.error('handlePlayerDropdownSelect Error: Invalid player object');
+            Logger.error('handlePlayerDropdownSelect', 'Invalid player:', player)
             return;
         }
 
@@ -324,19 +364,27 @@ function App(callback, deps) {
             setPlayerData({playerData: []});
             clearSvgContent();
 
+
             // Set the selected player
             setSelectedPlayerState(player);
 
-            // Set the rank options
-            if (player.value && predictionLimit) {
+            // Set the default rank options until we get the data to restrict them.
+            Logger.debug('handlePlayerDropdownSelect', ranksToOptions(ranks))
 
-                await handlePlayerData(player.value, gameType.value);
-            }
+            setRankPredictOptions(ranksToOptions(ranks.filter(rank => rank.points > 1500)));
+            setPredictionLimit(rankPredictOptions[rankPredictOptions.length - 1]);
+
+            // // Set the rank options
+            // if (player.value && predictionLimit) {
+            //     Logger.debug('handlePlayerDropdownSelect', player.value)
+            //     Logger.debug('handlePlayerDropdownSelect', gameType.value)
+            //     await handlePlayerData(player.value, gameType.value);
+            // }
             // Clear the error message
             clearSvgContent();
             setErrorMessage(null);
         } catch (error) {
-            console.error('handlePlayerDropdownSelect Error:', error);
+            Logger.error('handlePlayerDropdownSelect', 'Error:', error);
             setErrorMessage("No Data Available, Search Again");
             // Clear the player data
             clearSvgContent();
@@ -350,31 +398,63 @@ function App(callback, deps) {
         setGameType(gameType)
     }
 
-    // Function to handle prediction limit dropdown select
-    const handlePredictionLimitDropdownSelect = async (rank) => {
+    // Function to fetch player data
+    const handlePlayerData = async () => {
+        Logger.debug('handlePlayerData', "Called handlePlayerData");
+        setErrorMessage(null);
 
-        setPredictionLimit(rank);
+        // Fetching data based on current selected player and game configuration
+        const playerData = await fetchPlayerDataOnly(selectedPlayer.value, gameType.value, predictionLimit.value);
+        Logger.debug('handlePlayerData', "Fetched player data:", playerData);
 
-        // Check if the player data is valid
+        // Check if the player data is valid and has necessary details
         if (playerData && playerData.playerData && playerData.playerData.length > 0) {
             const dates = playerData.playerData.map(item => item.date);
             const ratings = playerData.playerData.map(item => item.rating);
 
-            // Calculate the regression data
-            const regressionData = calculateRegressionData(dates, ratings, rank.value);
+            // Calculate regression data based on dates and ratings
+            const regressionData = calculateRegressionData(dates, ratings, 1600);
+            Logger.debug('handlePlayerData', "Regression data calculated:", regressionData);
+
             if (regressionData) {
-                // Set the regression data
                 setRegressionData(regressionData);
-                // Set the player data
+                setPlayerData(playerData);
+                setRankOptions(regressionData);
+            }
+        } else {
+            setErrorMessage("No Data Available, Search Again");
+            Logger.error('handlePlayerData', "No player data available:", playerData);
+            setPlayerData({playerData: []});
+        }
+    };
+
+// Function to handle prediction limit dropdown select
+    const handlePredictionLimitDropdownSelect = async (rank) => {
+        Logger.debug('handlePredictionLimitDropdownSelect', "Called handlePredictionLimitDropdownSelect with rank:", rank);
+        setPredictionLimit(rank);
+
+        // Assuming playerData is accessible here, might be managed via states or context
+        if (playerData && playerData.playerData && playerData.playerData.length > 0) {
+            const dates = playerData.playerData.map(item => item.date);
+            const ratings = playerData.playerData.map(item => item.rating);
+
+            // Calculate new regression data using the new rank value
+            const regressionData = calculateRegressionData(dates, ratings, rank.value);
+            Logger.debug('handlePredictionLimitDropdownSelect', "Updated regression data:", regressionData);
+
+            if (regressionData) {
+                setRegressionData(regressionData);
                 setPlayerData(playerData);
             }
         } else {
             setErrorMessage("No Data Available, Search Again");
             setPlayerData({playerData: []});
         }
-    }
+    };
+
 
     const handleGetDataButton = async () => {
+        Logger.debug('handleGetDataButton', "Called handleGetDataButton")
         try {
             // Clear the SVG content
             clearSvgContent();
@@ -383,43 +463,19 @@ function App(callback, deps) {
 
             // Check if the selected player and game type are valid
             if (selectedPlayer && gameType && predictionLimit) {
+                Logger.debug('handleGetDataButton', selectedPlayer)
+                Logger.debug('handleGetDataButton', gameType)
                 await handlePlayerData(selectedPlayer.value, gameType.value);
             }
 
             setIsLoading(false);
         } catch (error) {
-            console.error('handleGetDataButton Error:', error);
+            Logger.error('handleGetDataButton', 'Error:', error);
             setErrorMessage("No Data Available, Search Again");
             // Clear the player data
         }
     };
 
-    // Function to fetch player data
-    const handlePlayerData = async () => {
-
-        setErrorMessage(null);
-        const playerData = await fetchPlayerDataOnly(selectedPlayer.value, gameType.value, predictionLimit.value);
-
-
-        // Check if the player data is valid
-        if (playerData && playerData.playerData && playerData.playerData.length > 0) {
-            // Get the dates and ratings
-            const dates = playerData.playerData.map(item => item.date);
-            const ratings = playerData.playerData.map(item => item.rating);
-            const regressionData = calculateRegressionData(dates, ratings, 1600);
-            if (regressionData) {
-                // Set the regression data
-                setRegressionData(regressionData);
-                setPlayerData(playerData);
-
-                setRankOptions(regressionData);
-            }
-        } else {
-            setErrorMessage("No Data Available, Search Again");
-            console.error('handlePlayerData No player data available:', playerData);
-            setPlayerData({playerData: []});
-        }
-    };
 
     // Function to calculate the regression data
     const calculateRegressionData = (dates, ratings, predictionLimit) => {
@@ -430,10 +486,10 @@ function App(callback, deps) {
             if (typeof predictionLimit === 'number') {
                 return calculateRegressionLine(dates, ratings, predictionLimit);
             } else {
-                console.error('calculateRegressionData Prediction limit is not a number:', predictionLimit);
+                Logger.error('calculateRegressionData', 'Prediction limit is not a number:', predictionLimit);
             }
         } else {
-            console.error('calculateRegressionData Dates and ratings are not arrays of the same length:', dates, ratings);
+            Logger.error('calculateRegressionData', 'Dates and ratings are not arrays of the same length:', dates, ratings);
         }
         return null;
     };
@@ -441,8 +497,10 @@ function App(callback, deps) {
     // Function to calculate the regression line
     const calculateRegressionLine = (dates, ratings, predictionLimit) => {
 
+        Logger.debug('calculateRegressionData', "Called calculateRegressionLine")
+
         if (!dates || !ratings) {
-            console.error('calculateRegressionData Dates or ratings are undefined');
+            Logger.error('calculateRegressionData', 'Dates or ratings are undefined');
             return;
         }
 
@@ -460,12 +518,19 @@ function App(callback, deps) {
 
 
 
+
     // Function to set the rank options
     const setRankOptions = (regData) => {
+
+        Logger.debug('setRankOptions', "Called setRankOptions")
 
         if (selectedPlayer.value !== '') {
             const rating = gameType.value === 'rm_solo' ? selectedPlayer.ratingSolo : selectedPlayer.ratingTeam;
             const gameMode = gameType.value === 'rm_solo' ? "solo" : "team";
+
+
+            Logger.debug('setRankOptions', rating)
+            Logger.debug('setRankOptions', gameMode)
 
             handleRankOptions(regData, rating, gameMode);
         }
@@ -474,13 +539,16 @@ function App(callback, deps) {
     // Function to set the rank options based on the rating
     const handleRankOptions = (regData, rating, gameMode) => {
 
+        Logger.debug('handleRankOptions', "Called handleRankOptions")
         if (regData.slope > 0) {
-
+            Logger.debug('Slope is positive')
             if (rating > 1600) {
+                Logger.debug('Rating is above 1600')
                 setErrorMessage(`Sorry, we cant plot for you, your ${gameMode} rating is above Conqueror III.`);
                 return;
             }
             if (rating > 1500) {
+                Logger.debug('Rating is above 1500')
                 setRankPredictOptions(ranksToOptions(ranks.filter(rank => rank.points > 1500)));
                 setPredictionLimit(rankPredictOptions[rankPredictOptions.length - 1]);
                 return;
@@ -489,23 +557,31 @@ function App(callback, deps) {
             const nextRank = ranks[currentRankIndex]; // Get the next rank
             setRankPredictOptions(ranksToOptions(ranks.filter(rank => rank.points > nextRank.points)));
             setPredictionLimit(rankPredictOptions[rankPredictOptions.length - 1]);
+            Logger.debug('handleRankOptions', rankPredictOptions)
+            Logger.debug('handleRankOptions', predictionLimit)
+            Logger.debug('handleRankOptions', nextRank)
+            Logger.debug('handleRankOptions', currentRankIndex)
         }
         if (regData.slope < 0) {
+            Logger.debug('Slope is negative')
             // Set to bronze, all the way down when slope is negative
             const bronzeIRank = ranks.find(rank => rank.name === "Bronze I");
             const bronzeIRankOption = ranksToOptions([bronzeIRank]);
             setRankPredictOptions(bronzeIRankOption);
             setPredictionLimit({value: bronzeIRank.points, label: bronzeIRank.name});
-
+            Logger.debug('handleRankOptions', rankPredictOptions)
+            Logger.debug('handleRankOptions', predictionLimit)
+            Logger.debug('handleRankOptions', bronzeIRank)
+            Logger.debug('handleRankOptions', bronzeIRankOption)
         }
     }
 
     // Use effect to update the visualization when the dimensions change
     useEffect(() => {
-
+        Logger.debug('useEffect', "Called useEffect")
         // Redraw the SVG with the new dimensions
         if (playerData.playerId === selectedPlayer.value && regressionDataSet && playerData.playerData.length > 0) {
-
+            Logger.debug('useEffect', "Redrawing SVG")
             updateVisualization();
         }
 
@@ -514,6 +590,7 @@ function App(callback, deps) {
     ]);
 
     const updateDimensions = useCallback(() => {
+        Logger.debug('updateDimensions', "Called updateDimensions")
         // Here you can handle the window resize event
         // For example, you can update the state that stores the window dimensions
 
@@ -524,6 +601,8 @@ function App(callback, deps) {
     }, [updateVisualization, playerData, selectedPlayer, regressionDataSet]); // Pass updateVisualization as a dependency
 
 
+
+
     useEffect(() => {
         window.addEventListener('resize', updateDimensions);
 
@@ -532,12 +611,6 @@ function App(callback, deps) {
     }, [updateDimensions]); // Pass updateDimensions as a dependency
 
 
-    useEffect(() => {
-        const timerId = setTimeout(() => {
-            handleSearchTextInput(inputValue);
-        }, 1000);
-        return () => clearTimeout(timerId);
-    }, [inputValue, handleSearchTextInput]);
 
 
     return (
@@ -556,15 +629,17 @@ function App(callback, deps) {
 
                 <div className="dropdown-button-container">
                     <AsyncSelect
+
                         cacheOptions
-                        components={animatedComponents}
-                        loadOptions={loadPlayerDropdownSelectValues}
+                        defaultOptions
+                        inputValue={inputValue}
+                        getOptionLabel={e => e.label}
+                        getOptionValue={e => e.value}
+                        loadOptions={loadOptions}
                         onInputChange={handleInputChange}
                         onChange={handlePlayerDropdownSelect}
-                        placeholder="Search for a player"
-                        isMulti={false}  // set to true if multi-select is desired
-                        getOptionLabel={(option) => option.label}
-                        getOptionValue={(option) => option.value}
+                        isLoading={isLoading}
+                        components={animatedComponents}
                         styles={{
                             control: (provided) => ({
                                 ...provided,
@@ -592,6 +667,7 @@ function App(callback, deps) {
                         }}
                     />
                     <Select
+                        components={{ Input: CustomInput }}
                         defaultValue={gameTypeOptions[1]}
                         options={gameTypeOptions}
                         onChange={handleGameTypeDropdownSelect}
@@ -624,6 +700,7 @@ function App(callback, deps) {
                         }}
                     />
                     <Select
+                        components={{ Input: CustomInput }}
                         value={predictionLimit}
                         options={rankPredictOptions}
                         onChange={handlePredictionLimitDropdownSelect}
