@@ -31,7 +31,7 @@ To set up the project locally:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourgithub/when-will-i-be-conqueror.git
+   git clone https://github.com/brentoncollins/when-will-i-be-conqueror.git
 
 2. Navigate into the project directory:
     ```bash

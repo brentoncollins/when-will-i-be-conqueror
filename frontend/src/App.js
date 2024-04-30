@@ -322,6 +322,31 @@ function App(callback, deps) {
     }, []);
 
 
+    function getRegressionLine(dates, ratings, predictionLimit) {
+        const n = dates.length;
+        let sumX = 0;
+        let sumY = 0;
+        let sumXY = 0;
+        let sumXX = 0;
+
+        for(let i = 0; i < n; i++) {
+            sumX += dates[i];
+            sumY += ratings[i];
+            sumXY += (dates[i] * ratings[i]);
+            sumXX += (dates[i] * dates[i]);
+        }
+
+        const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+        const intercept = (sumY - slope * sumX) / n;
+
+        const x1 = Math.min(...dates);
+        const y1 = slope * x1 + intercept;
+        const x2 = (predictionLimit - intercept) / slope;
+        const y2 = predictionLimit;
+
+        return { slope, intercept, x1, y1, x2, y2 };
+    }
+
 
     // Function to get the banner height, so we can adjust the SVG size
     function getBannerHeight() {
@@ -608,6 +633,7 @@ function App(callback, deps) {
         // Cleanup function to remove the event listener when the component unmounts
         return () => window.removeEventListener('resize', updateDimensions);
     }, [updateDimensions]); // Pass updateDimensions as a dependency
+
 
 
 
