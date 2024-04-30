@@ -1,4 +1,4 @@
-# When Will I Be Conqueror?
+# AoE4 When Will I Be Conqueror?
 
 Ever wondered when you'll rise from the gold leagues to become a Conqueror in Age of Empires IV? 
 "When Will I Be Conqueror?" is a web application that predicts when you'll reach the top ranks using linear regression. 
@@ -46,8 +46,8 @@ To set up the project locally:
 3. Build the Docker container (Set the environment variable SEASON_START_TIMESTAMP to the start of the current season):
     ```bash 
    cd ..
-   docker build -t when-will-i-be-conqueror -f deploy/Dockerfile .
-   docker run -e SEASON_START_TIMESTAMP=1710777600 -p 5000:5000 aoe4-when-will-i-be-conc
+   docker build -t aoe4-when-will-i-be-conqueror -f deploy/Dockerfile .
+   docker run -e SEASON_START_TIMESTAMP=1710777600 -p 5000:5000 aoe4-when-will-i-be-conqueror
    ```
    
 
